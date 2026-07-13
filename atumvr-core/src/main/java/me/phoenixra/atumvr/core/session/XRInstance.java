@@ -3,6 +3,7 @@ package me.phoenixra.atumvr.core.session;
 import lombok.Getter;
 import me.phoenixra.atumvr.api.exceptions.AtumVRException;
 import me.phoenixra.atumvr.core.XRProvider;
+import me.phoenixra.atumvr.core.session.platform.XRPlatform;
 import org.jetbrains.annotations.NotNull;
 import org.lwjgl.PointerBuffer;
 import org.lwjgl.openxr.*;
@@ -18,8 +19,6 @@ import java.util.Set;
  * XR session instance (low-level OpenXR stuff)
  */
 public class XRInstance {
-    private final static String GRAPHICS_EXTENSION = KHROpenGLEnable.XR_KHR_OPENGL_ENABLE_EXTENSION_NAME;
-
     private final XRProvider vrProvider;
 
     @Getter
@@ -45,6 +44,8 @@ public class XRInstance {
     public void init() {
         try (MemoryStack stack = MemoryStack.stackPush()) {
 
+            XRPlatform.get().initializeLoader(stack);
+
             var extensionsPointer = setupExtensions(
                     vrProvider, stack
             );
@@ -60,7 +61,7 @@ public class XRInstance {
             // 2) Create XrInstanceCreateInfo
             var instInfo = XrInstanceCreateInfo.calloc(stack)
                     .type(XR10.XR_TYPE_INSTANCE_CREATE_INFO)
-                    .next(0)
+                    .next(XRPlatform.get().getInstanceCreateInfo(stack))
                     .applicationInfo(appInfo)
                     .enabledExtensionNames(extensionsPointer)
                     .enabledApiLayerNames(null);
@@ -97,6 +98,8 @@ public class XRInstance {
 
     private PointerBuffer setupExtensions(XRProvider vrProvider, MemoryStack stack){
 
+        String graphicsExtension = XRPlatform.get().getGraphicsExtension();
+
 
         // 1) Enumerate available instance extensions
         var extCountBuf = stack.callocInt(1);
@@ -126,7 +129,7 @@ public class XRInstance {
 
         // 2) Define desired extensions in priority order
         List<String> desiredExtensions = new ArrayList<>(List.of(
-                GRAPHICS_EXTENSION,
+                graphicsExtension,
 
                 EXTDebugUtils.XR_EXT_DEBUG_UTILS_EXTENSION_NAME,
                 FBDisplayRefreshRate.XR_FB_DISPLAY_REFRESH_RATE_EXTENSION_NAME,
@@ -135,9 +138,9 @@ public class XRInstance {
         desiredExtensions.addAll(vrProvider.getXRAppExtensions());
 
         // Ensure graphics extension is present
-        if (!availableExtensions.contains(GRAPHICS_EXTENSION)) {
+        if (!availableExtensions.contains(graphicsExtension)) {
             throw new AtumVRException(
-                    "Missing required graphics extension: " + GRAPHICS_EXTENSION
+                    "Missing required graphics extension: " + graphicsExtension
             );
         }
 

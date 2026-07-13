@@ -15,7 +15,7 @@ dependencies {
     api("org.lwjgl:lwjgl")
     api("org.lwjgl:lwjgl-opengl")
     api("org.lwjgl:lwjgl-glfw")
-    api("org.lwjgl:lwjgl-openxr")
+    api files("${rootDir}/../deps/lwjgl-openxr-quest-3.3.3.jar")
 
     api("org.lwjgl:lwjgl::natives-windows")
     api("org.lwjgl:lwjgl-opengl::natives-windows")

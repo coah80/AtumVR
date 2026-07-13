@@ -3,25 +3,17 @@ package me.phoenixra.atumvr.core.session;
 import lombok.Getter;
 import me.phoenixra.atumvr.api.exceptions.AtumVRException;
 import me.phoenixra.atumvr.core.XRProvider;
+import me.phoenixra.atumvr.core.session.platform.XRPlatform;
 import org.jetbrains.annotations.NotNull;
-import org.lwjgl.PointerBuffer;
-import org.lwjgl.glfw.GLFWNativeGLX;
-import org.lwjgl.glfw.GLFWNativeWGL;
-import org.lwjgl.glfw.GLFWNativeWin32;
-import org.lwjgl.glfw.GLFWNativeX11;
 import org.lwjgl.openxr.*;
 import org.lwjgl.system.MemoryStack;
-import org.lwjgl.system.Platform;
 import org.lwjgl.system.Struct;
-import org.lwjgl.system.linux.X11;
-import org.lwjgl.system.windows.User32;
 
 import java.nio.LongBuffer;
-import java.util.Objects;
 
-import static org.lwjgl.opengl.GLX13.*;
-import static org.lwjgl.system.MemoryStack.stackInts;
-import static org.lwjgl.system.MemoryUtil.*;
+import static org.lwjgl.system.MemoryUtil.NULL;
+import static org.lwjgl.system.MemoryUtil.memAddress;
+import static org.lwjgl.system.MemoryUtil.memUTF8;
 
 /**
  * XR session system (low-level OpenXR stuff)
@@ -97,48 +89,7 @@ public class XRSystem {
                                             XrInstance instance,
                                             long systemID,
                                             long windowHandle) {
-
-        var graphicsRequirements = XrGraphicsRequirementsOpenGLKHR.calloc(stack)
-                .type(KHROpenGLEnable.XR_TYPE_GRAPHICS_REQUIREMENTS_OPENGL_KHR);
-        KHROpenGLEnable.xrGetOpenGLGraphicsRequirementsKHR(
-                instance, systemID, graphicsRequirements
-        );
-        //Bind the OpenGL context to the OpenXR instance and create the session
-        if (Platform.get() == Platform.WINDOWS) {
-            return XrGraphicsBindingOpenGLWin32KHR.calloc(stack).set(
-                    KHROpenGLEnable.XR_TYPE_GRAPHICS_BINDING_OPENGL_WIN32_KHR,
-                    NULL,
-                    User32.GetDC(GLFWNativeWin32.glfwGetWin32Window(windowHandle)),
-                    GLFWNativeWGL.glfwGetWGLContext(windowHandle)
-            );
-        } else if (Platform.get() == Platform.LINUX) {
-            long xDisplay = GLFWNativeX11.glfwGetX11Display();
-
-            long glXContext = GLFWNativeGLX.glfwGetGLXContext(windowHandle);
-            long glXWindowHandle = GLFWNativeGLX.glfwGetGLXWindow(windowHandle);
-
-            int fbXID = glXQueryDrawable(xDisplay, glXWindowHandle, GLX_FBCONFIG_ID);
-            PointerBuffer fbConfigBuf = glXChooseFBConfig(
-                    xDisplay, X11.XDefaultScreen(xDisplay),
-                    stackInts(GLX_FBCONFIG_ID, fbXID, 0)
-            );
-            if (fbConfigBuf == null) {
-                throw new AtumVRException("Framebuffer config is null");
-            }
-            long fbConfig = fbConfigBuf.get();
-
-            return XrGraphicsBindingOpenGLXlibKHR.calloc(stack).set(
-                    KHROpenGLEnable.XR_TYPE_GRAPHICS_BINDING_OPENGL_XLIB_KHR,
-                    NULL,
-                    xDisplay,
-                    (int) Objects.requireNonNull(glXGetVisualFromFBConfig(xDisplay, fbConfig)).visualid(),
-                    fbConfig,
-                    glXWindowHandle,
-                    glXContext
-            );
-        } else {
-            throw new AtumVRException("MacOS not supported");
-        }
+        return XRPlatform.get().createGraphicsBinding(stack, instance, systemID, windowHandle);
     }
     public void destroy(){
 
