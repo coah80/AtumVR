@@ -195,7 +195,9 @@ public abstract class XRRenderer implements AtumVRRenderer {
 
 
         XrSwapchain xrSwapchain = vrProvider.getSession().getSwapChain().getHandle();
-        this.projectionLayerViews = XrCompositionLayerProjectionView.calloc(2);
+        if (this.projectionLayerViews == null) {
+            this.projectionLayerViews = XrCompositionLayerProjectionView.calloc(2);
+        }
         try (MemoryStack stack = MemoryStack.stackPush()) {
 
             IntBuffer intBuf2 = stack.callocInt(1);
@@ -293,7 +295,6 @@ public abstract class XRRenderer implements AtumVRRenderer {
                             .layers(layers));
             vrProvider.checkXRError(error, "xrEndFrame", "");
 
-            this.projectionLayerViews.close();
         }
 
         if (steamVRLinuxWorkaround) {
@@ -510,6 +511,10 @@ public abstract class XRRenderer implements AtumVRRenderer {
 
     public void destroy() {
         getCurrentScene().destroy();
+        if (projectionLayerViews != null) {
+            projectionLayerViews.close();
+            projectionLayerViews = null;
+        }
         if(glContextCreated) {
             glfwFreeCallbacks(windowHandle);
             glfwDestroyWindow(windowHandle);

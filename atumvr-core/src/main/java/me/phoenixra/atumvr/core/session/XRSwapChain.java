@@ -59,9 +59,14 @@ public class XRSwapChain {
 
             long chosenFormat = pickSwapchainFormat(session, stack);
 
-            this.handle       = createSwapchain(session, viewConfigs.get(0), chosenFormat, stack);
+            boolean foveated = isFoveationSupported(session);
+            this.handle       = createSwapchain(session, viewConfigs.get(0), chosenFormat, foveated, stack);
             this.eyeWidth = viewConfigs.get(0).recommendedImageRectWidth();
             this.eyeHeight = viewConfigs.get(0).recommendedImageRectHeight();
+
+            if (foveated) {
+                applyFoveationLevel(session, stack);
+            }
 
             // persistent view buffer on heap
             this.xrViewBuffer = XrView.calloc(viewCount);
@@ -131,15 +136,78 @@ public class XRSwapChain {
         throw new IllegalStateException("No compatible swapchain format found: " + available);
     }
 
+    private boolean isFoveationSupported(XrSession session) {
+        var caps = session.getCapabilities();
+        return XRPlatform.isAndroid()
+                && caps.XR_FB_foveation
+                && caps.XR_FB_foveation_configuration
+                && caps.XR_FB_swapchain_update_state
+                && vrProvider.getFoveationLevel()
+                        != FBFoveationConfiguration.XR_FOVEATION_LEVEL_NONE_FB;
+    }
+
+    private void applyFoveationLevel(XrSession session, MemoryStack stack) {
+        int level = vrProvider.getFoveationLevel();
+
+        XrFoveationLevelProfileCreateInfoFB levelInfo = XrFoveationLevelProfileCreateInfoFB.calloc(stack)
+                .type(FBFoveationConfiguration.XR_TYPE_FOVEATION_LEVEL_PROFILE_CREATE_INFO_FB)
+                .level(level)
+                .verticalOffset(0f)
+                .dynamic(FBFoveationConfiguration.XR_FOVEATION_DYNAMIC_LEVEL_ENABLED_FB);
+
+        XrFoveationProfileCreateInfoFB profileInfo = XrFoveationProfileCreateInfoFB.calloc(stack)
+                .type(FBFoveation.XR_TYPE_FOVEATION_PROFILE_CREATE_INFO_FB)
+                .next(levelInfo);
+
+        PointerBuffer profilePtr = stack.callocPointer(1);
+        vrProvider.checkXRError(
+                FBFoveation.xrCreateFoveationProfileFB(session, profileInfo, profilePtr),
+                "xrCreateFoveationProfileFB", ""
+        );
+        XrFoveationProfileFB profile = new XrFoveationProfileFB(profilePtr.get(0), session);
+
+        XrSwapchainStateFoveationFB foveationState = XrSwapchainStateFoveationFB.calloc(stack)
+                .type(FBFoveation.XR_TYPE_SWAPCHAIN_STATE_FOVEATION_FB)
+                .flags(0)
+                .profile(profile);
+
+        vrProvider.checkXRError(
+                FBSwapchainUpdateState.xrUpdateSwapchainFB(
+                        handle,
+                        XrSwapchainStateBaseHeaderFB.create(foveationState)
+                ),
+                "xrUpdateSwapchainFB", "foveation"
+        );
+
+        vrProvider.checkXRError(false,
+                FBFoveation.xrDestroyFoveationProfileFB(profile),
+                "xrDestroyFoveationProfileFB", "ignoring"
+        );
+
+        vrProvider.getLogger().logInfo(
+                "Fixed foveated rendering enabled, level " + level
+        );
+    }
+
     private XrSwapchain createSwapchain(
             XrSession session,
             XrViewConfigurationView viewConfig,
             long format,
+            boolean foveated,
             MemoryStack stack)
     {
+        long next = NULL;
+        if (foveated) {
+            next = XrSwapchainCreateInfoFoveationFB.calloc(stack)
+                    .type(FBFoveation.XR_TYPE_SWAPCHAIN_CREATE_INFO_FOVEATION_FB)
+                    .next(NULL)
+                    .flags(FBFoveation.XR_SWAPCHAIN_CREATE_FOVEATION_SCALED_BIN_BIT_FB)
+                    .address();
+        }
+
         XrSwapchainCreateInfo info = XrSwapchainCreateInfo.calloc(stack)
                 .type(XR_TYPE_SWAPCHAIN_CREATE_INFO)
-                .next(NULL)
+                .next(next)
                 .usageFlags(XR_SWAPCHAIN_USAGE_COLOR_ATTACHMENT_BIT)
                 .format(format)
                 .sampleCount(1)

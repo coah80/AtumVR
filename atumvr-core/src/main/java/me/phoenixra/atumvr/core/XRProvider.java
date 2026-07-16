@@ -200,6 +200,14 @@ public abstract class XRProvider implements AtumVRProvider {
         );
     }
 
+    public float getPreferredRefreshRate(){
+        return 120f;
+    }
+
+    public int getFoveationLevel(){
+        return FBFoveationConfiguration.XR_FOVEATION_LEVEL_MEDIUM_FB;
+    }
+
     // -------- LIFECYCLE --------
 
     @Override
